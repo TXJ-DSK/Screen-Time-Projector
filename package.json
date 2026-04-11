@@ -1,6 +1,7 @@
 {
-  "name": "vite-reactts-eslint-prettier",
+  "name": "screen-time-projector",
   "version": "0.0.1",
+  "description": "Upload screen-time screenshots, extract categories with OCR, and project weekly usage.",
   "type": "module",
   "engines": {
     "node": ">=22"
@@ -19,6 +20,7 @@
     "prepare": "husky"
   },
   "dependencies": {
+    "firebase": "^12.12.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4"
   },
