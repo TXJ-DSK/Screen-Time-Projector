@@ -4,7 +4,7 @@ import type {
   DailyLogEntry,
   WeeklyProjectionSummary,
 } from '../types/domain';
-import { addDays, startOfWeekMonday, toDateKey } from './date';
+import { addDays, toDateKey } from './date';
 
 export function calculateWeeklyProjection(
   logs: DailyLogEntry[],
@@ -12,26 +12,49 @@ export function calculateWeeklyProjection(
   today = new Date(),
 ): WeeklyProjectionSummary {
   const safeLookback = Math.max(14, Math.min(21, lookbackDays));
-  const endDate = new Date(today);
-  endDate.setHours(0, 0, 0, 0);
+  const todayDate = new Date(today);
+  todayDate.setHours(0, 0, 0, 0);
+  const todayKey = toDateKey(todayDate);
 
-  const lookbackStart = addDays(endDate, -(safeLookback - 1));
-  const weekStart = startOfWeekMonday(endDate);
+  const lookbackStart = addDays(todayDate, -(safeLookback - 1));
 
   const logsByDate = new Map<string, DailyLogEntry>();
   for (const log of logs) {
     logsByDate.set(log.dateKey, log);
   }
 
-  const applicationHistory = new Map<string, number[]>();
-  const applicationWeekToDate = new Map<string, number>();
-  const categoryHistory = new Map<string, number[]>();
-  const categoryWeekToDate = new Map<string, number>();
+  // Get today's log if it exists
+  const todayLog = logsByDate.get(todayKey);
+  const isTodayRecorded = !!todayLog;
 
+  // Build 21-day history for all apps and categories
+  const applicationHistory = new Map<string, number[]>();
+  const categoryHistory = new Map<string, number[]>();
+  const todayApplicationMinutes = new Map<string, number>();
+  const todayCategoryMinutes = new Map<string, number>();
+
+  // If today has data, extract it separately
+  if (todayLog) {
+    for (const app of todayLog.applications) {
+      todayApplicationMinutes.set(
+        app.name,
+        (todayApplicationMinutes.get(app.name) ?? 0) + app.minutesSpent,
+      );
+    }
+    for (const category of todayLog.categories) {
+      todayCategoryMinutes.set(
+        category.name,
+        (todayCategoryMinutes.get(category.name) ?? 0) + category.minutesSpent,
+      );
+    }
+  }
+
+  // Build history for all 21 days
   for (let dayOffset = 0; dayOffset < safeLookback; dayOffset += 1) {
     const day = addDays(lookbackStart, dayOffset);
     const dateKey = toDateKey(day);
     const log = logsByDate.get(dateKey);
+
     const applicationMinuteMap = new Map<string, number>();
     const categoryMinuteMap = new Map<string, number>();
 
@@ -63,7 +86,6 @@ export function calculateWeeklyProjection(
       if (!applicationHistory.has(appName)) {
         applicationHistory.set(appName, []);
       }
-
       applicationHistory.get(appName)?.push(applicationMinuteMap.get(appName) ?? 0);
     }
 
@@ -71,93 +93,58 @@ export function calculateWeeklyProjection(
       if (!categoryHistory.has(categoryName)) {
         categoryHistory.set(categoryName, []);
       }
-
       categoryHistory.get(categoryName)?.push(categoryMinuteMap.get(categoryName) ?? 0);
-    }
-
-    if (day >= weekStart && day <= endDate) {
-      for (const [appName, minutes] of applicationMinuteMap.entries()) {
-        applicationWeekToDate.set(
-          appName,
-          (applicationWeekToDate.get(appName) ?? 0) + minutes,
-        );
-      }
-      for (const [categoryName, minutes] of categoryMinuteMap.entries()) {
-        categoryWeekToDate.set(
-          categoryName,
-          (categoryWeekToDate.get(categoryName) ?? 0) + minutes,
-        );
-      }
     }
   }
 
-  const daysElapsedInWeek = Math.max(
-    1,
-    Math.round((endDate.getTime() - weekStart.getTime()) / (24 * 60 * 60 * 1000)) + 1,
-  );
-  const daysRemainingInWeek = Math.max(0, 7 - daysElapsedInWeek);
-
+  // Calculate projections: today vs 21-day average
   const applications: ApplicationProjection[] = [...applicationHistory.entries()]
     .map(([name, minutesHistory]) => {
       const historyTotal = minutesHistory.reduce((sum, value) => sum + value, 0);
       const averageDailyMinutes = Math.round(historyTotal / safeLookback);
-      const weekToDateMinutes = applicationWeekToDate.get(name) ?? 0;
-      const projectedEndOfWeekMinutes =
-        weekToDateMinutes + averageDailyMinutes * daysRemainingInWeek;
+      const todayMinutes = todayApplicationMinutes.get(name) ?? 0;
 
       return {
         name,
-        weekToDateMinutes,
+        todayMinutes,
         averageDailyMinutes,
-        projectedEndOfWeekMinutes,
-        baselineWeekMinutes: averageDailyMinutes * 7,
+        isTodayRecorded,
       };
     })
-    .filter((app) => app.baselineWeekMinutes > 0 || app.weekToDateMinutes > 0)
-    .sort((a, b) => b.projectedEndOfWeekMinutes - a.projectedEndOfWeekMinutes);
+    .filter((app) => app.averageDailyMinutes > 0 || app.todayMinutes > 0)
+    .sort((a, b) => b.averageDailyMinutes - a.averageDailyMinutes);
 
   const categories: CategoryProjection[] = [...categoryHistory.entries()]
     .map(([name, minutesHistory]) => {
       const historyTotal = minutesHistory.reduce((sum, value) => sum + value, 0);
       const averageDailyMinutes = Math.round(historyTotal / safeLookback);
-      const weekToDateMinutes = categoryWeekToDate.get(name) ?? 0;
-      const projectedEndOfWeekMinutes =
-        weekToDateMinutes + averageDailyMinutes * daysRemainingInWeek;
+      const todayMinutes = todayCategoryMinutes.get(name) ?? 0;
 
       return {
         name,
-        weekToDateMinutes,
+        todayMinutes,
         averageDailyMinutes,
-        projectedEndOfWeekMinutes,
-        baselineWeekMinutes: averageDailyMinutes * 7,
+        isTodayRecorded,
       };
     })
-    .filter(
-      (category) => category.baselineWeekMinutes > 0 || category.weekToDateMinutes > 0,
-    )
-    .sort((a, b) => b.projectedEndOfWeekMinutes - a.projectedEndOfWeekMinutes);
+    .filter((cat) => cat.averageDailyMinutes > 0 || cat.todayMinutes > 0)
+    .sort((a, b) => b.averageDailyMinutes - a.averageDailyMinutes);
 
-  const totalWeekToDateMinutes = applications.reduce(
-    (sum, app) => sum + app.weekToDateMinutes,
+  const totalTodayMinutes = applications.reduce(
+    (sum, app) => sum + app.todayMinutes,
     0,
   );
-  const totalProjectedEndOfWeekMinutes = applications.reduce(
-    (sum, app) => sum + app.projectedEndOfWeekMinutes,
-    0,
-  );
-  const totalBaselineWeekMinutes = applications.reduce(
-    (sum, app) => sum + app.baselineWeekMinutes,
+  const totalAverageDailyMinutes = applications.reduce(
+    (sum, app) => sum + app.averageDailyMinutes,
     0,
   );
 
   return {
     generatedAtIso: new Date().toISOString(),
     lookbackDays: safeLookback,
-    daysElapsedInWeek,
-    daysRemainingInWeek,
-    totalWeekToDateMinutes,
-    totalProjectedEndOfWeekMinutes,
-    totalBaselineWeekMinutes,
+    isTodayRecorded,
+    totalTodayMinutes,
+    totalAverageDailyMinutes,
     applications,
     categories,
   };

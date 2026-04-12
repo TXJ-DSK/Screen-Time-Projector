@@ -52,13 +52,13 @@ describe('calculateWeeklyProjection', () => {
     const summary = calculateWeeklyProjection(logs, 21, new Date('2026-04-11T12:00:00'));
 
     expect(summary.applications).toHaveLength(2);
-    expect(summary.totalWeekToDateMinutes).toBeGreaterThan(0);
-    expect(summary.totalProjectedEndOfWeekMinutes).toBeGreaterThanOrEqual(
-      summary.totalWeekToDateMinutes,
-    );
+    expect(summary.isTodayRecorded).toBe(true);
+    expect(summary.totalTodayMinutes).toBeGreaterThan(0);
+    expect(summary.totalAverageDailyMinutes).toBeGreaterThan(0);
 
     const chrome = summary.applications.find((app) => app.name === 'Chrome');
     expect(chrome?.averageDailyMinutes).toBeGreaterThan(0);
+    expect(chrome?.todayMinutes).toBeGreaterThan(0);
   });
 
   test('clamps lookback days to at least 14 days', () => {
@@ -67,6 +67,6 @@ describe('calculateWeeklyProjection', () => {
     const summary = calculateWeeklyProjection(logs, 3, new Date('2026-04-11T12:00:00'));
 
     expect(summary.lookbackDays).toBe(14);
-    expect(summary.applications[0]?.baselineWeekMinutes).toBeGreaterThan(0);
+    expect(summary.applications[0]?.averageDailyMinutes).toBeGreaterThan(0);
   });
 });

@@ -135,21 +135,32 @@ export function getTopCategories(
   limit: number = 5,
 ): Array<{ name: string; averageDailyMinutes: number }> {
   const categoryTotals = new Map<string, number>();
+  const categoryDayCounts = new Map<string, number>();
 
+  // Aggregate all categories and count days they appear
   for (const log of logs) {
     for (const category of log.categories) {
       categoryTotals.set(
         category.name,
         (categoryTotals.get(category.name) ?? 0) + category.minutesSpent,
       );
+      categoryDayCounts.set(
+        category.name,
+        (categoryDayCounts.get(category.name) ?? 0) + 1,
+      );
     }
   }
 
+  // Calculate average only based on days the category appears
   return [...categoryTotals.entries()]
-    .map(([name, totalMinutes]) => ({
-      name,
-      averageDailyMinutes: Math.round(totalMinutes / Math.max(1, logs.length)),
-    }))
+    .map(([name, totalMinutes]) => {
+      const daysWithData = categoryDayCounts.get(name) ?? 1;
+      return {
+        name,
+        // Average across days when this category was tracked
+        averageDailyMinutes: Math.round(totalMinutes / daysWithData),
+      };
+    })
     .sort((a, b) => b.averageDailyMinutes - a.averageDailyMinutes)
     .slice(0, limit);
 }

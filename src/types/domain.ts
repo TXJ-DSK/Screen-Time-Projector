@@ -28,28 +28,24 @@ export interface ExtractedScreenTimeData {
 
 export interface ApplicationProjection {
   name: string;
-  weekToDateMinutes: number;
-  averageDailyMinutes: number;
-  projectedEndOfWeekMinutes: number;
-  baselineWeekMinutes: number;
+  todayMinutes: number;
+  averageDailyMinutes: number; // 21-day average
+  isTodayRecorded: boolean;
 }
 
 export interface CategoryProjection {
   name: string;
-  weekToDateMinutes: number;
-  averageDailyMinutes: number;
-  projectedEndOfWeekMinutes: number;
-  baselineWeekMinutes: number;
+  todayMinutes: number;
+  averageDailyMinutes: number; // 21-day average
+  isTodayRecorded: boolean;
 }
 
 export interface WeeklyProjectionSummary {
   generatedAtIso: string;
   lookbackDays: number;
-  daysElapsedInWeek: number;
-  daysRemainingInWeek: number;
-  totalWeekToDateMinutes: number;
-  totalProjectedEndOfWeekMinutes: number;
-  totalBaselineWeekMinutes: number;
+  isTodayRecorded: boolean;
+  totalTodayMinutes: number;
+  totalAverageDailyMinutes: number;
   applications: ApplicationProjection[];
   categories: CategoryProjection[];
 }

@@ -7,25 +7,22 @@ import ProjectionDashboard from './ProjectionDashboard';
 const summary: WeeklyProjectionSummary = {
   generatedAtIso: '2026-04-11T12:00:00.000Z',
   lookbackDays: 21,
-  daysElapsedInWeek: 6,
-  daysRemainingInWeek: 1,
-  totalWeekToDateMinutes: 420,
-  totalProjectedEndOfWeekMinutes: 500,
-  totalBaselineWeekMinutes: 490,
+  isTodayRecorded: true,
+  totalTodayMinutes: 420,
+  totalAverageDailyMinutes: 500,
   applications: [
     {
       name: 'Chrome',
-      weekToDateMinutes: 260,
+      todayMinutes: 260,
       averageDailyMinutes: 40,
-      projectedEndOfWeekMinutes: 300,
-      baselineWeekMinutes: 280,
+      isTodayRecorded: true,
     },
   ],
   categories: [],
 };
 
 describe('ProjectionDashboard', () => {
-  test('renders projection statistics and applications', () => {
+  test('renders today vs 21-day average statistics and applications', () => {
     render(
       <ProjectionDashboard
         userEmail="student@example.com"
@@ -38,8 +35,8 @@ describe('ProjectionDashboard', () => {
       />,
     );
 
-    expect(screen.getByText('Current Week vs Projection')).toBeInTheDocument();
+    expect(screen.getByText('Today vs 21-Day Average')).toBeInTheDocument();
     expect(screen.getByText('Chrome')).toBeInTheDocument();
-    expect(screen.getByText(/Projected end of week/)).toBeInTheDocument();
+    expect(screen.getByText(/21-Day Average/)).toBeInTheDocument();
   });
 });
