@@ -19,14 +19,36 @@ import {
   fetchLogsForDateWindow,
   saveDailyLog,
 } from './services/screenTimeService';
-import { extractScreenTimeFromImage } from './services/visionService';
+import { extractScreenTimeFromImage, geminiRuntime } from './services/visionService';
 import type { DailyLogEntry, ExtractedScreenTimeData } from './types/domain';
 import { addDays } from './utils/date';
 import { calculateWeeklyProjection } from './utils/projection';
 
 const LOOKBACK_DAYS = 21;
 
+function isFirebaseLikeError(
+  error: unknown,
+): error is { code: string; message?: string } {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    typeof (error as { code?: unknown }).code === 'string'
+  );
+}
+
 function toErrorMessage(error: unknown): string {
+  if (isFirebaseLikeError(error)) {
+    switch (error.code) {
+      case 'auth/configuration-not-found':
+        return 'Firebase Authentication is not fully configured for this project. In Firebase Console, open Authentication, click Get started, and enable Email/Password (and Google if needed).';
+      case 'auth/operation-not-allowed':
+        return 'This sign-in method is disabled in Firebase Console. Enable it in Authentication > Sign-in method.';
+      default:
+        break;
+    }
+  }
+
   if (error instanceof Error) {
     return error.message;
   }
@@ -144,22 +166,22 @@ function App() {
     }
   }
 
-  if (!firebaseRuntime.configured) {
+  const missingSetupKeys = [...firebaseRuntime.missingKeys, ...geminiRuntime.missingKeys];
+
+  if (missingSetupKeys.length > 0) {
     return (
       <main className="setup-shell">
         <section className="setup-card">
           <p className="eyebrow">Setup Required</p>
-          <h1>Firebase configuration is missing.</h1>
+          <h1>Project configuration is missing.</h1>
           <p>
             Add the following environment variables in your local .env file before using
-            authentication and Firestore storage.
+            authentication, Firestore storage, and Gemini extraction.
           </p>
           <ul>
-            {firebaseRuntime.missingKeys.map((key) => (
+            {missingSetupKeys.map((key) => (
               <li key={key}>{key}</li>
             ))}
-            <li>VITE_VISION_API_URL</li>
-            <li>VITE_VISION_API_KEY (optional)</li>
           </ul>
         </section>
       </main>

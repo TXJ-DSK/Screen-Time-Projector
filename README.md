@@ -4,7 +4,7 @@ Screen Time Projector is a React + TypeScript web app that lets users:
 
 - authenticate with Firebase
 - upload daily screen-time screenshots
-- extract category usage through an external OCR/vision API
+- extract category usage directly with Gemini multimodal models
 - store daily logs in Firestore under each authenticated user
 - compute and visualize weekly projections using a 14-21 day moving average
 
@@ -40,20 +40,28 @@ Copy .env.example to .env and populate:
 - VITE_FIREBASE_STORAGE_BUCKET
 - VITE_FIREBASE_MESSAGING_SENDER_ID
 - VITE_FIREBASE_APP_ID
-- VITE_VISION_API_URL
-- VITE_VISION_API_KEY (optional)
+- VITE_GEMINI_API_KEY
+- VITE_GEMINI_MODEL (optional, default: gemini-2.5-flash)
+- VITE_GEMINI_BASE_URL (optional, default: https://generativelanguage.googleapis.com/v1beta)
 
-The app will display a setup screen if required Firebase variables are missing.
+The app will display a setup screen if required Firebase or Gemini variables are missing.
 
-## Vision API Contract
+## Gemini Extraction Contract
 
-The upload workflow POSTs JSON to VITE_VISION_API_URL with:
+The upload workflow sends screenshot + prompt to:
 
-- imageBase64
-- mimeType
-- fileName
+- https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent
 
-Expected response shape (flexible parser):
+Authentication:
+
+- API key in query parameter using VITE_GEMINI_API_KEY
+
+Request includes:
+
+- prompt instructions asking Gemini to return strict JSON
+- inline image bytes (base64 + mime type)
+
+Expected model JSON shape (the parser is tolerant):
 
 - categories: array of objects containing name and either minutesSpent, minutes, or duration
 - totalMinutes (optional)
@@ -89,7 +97,7 @@ All reads and writes are scoped to the authenticated uid.
 
 ## Project Structure
 
-- src/services: Firebase auth, Firestore persistence, vision API extraction
+- src/services: Firebase auth, Firestore persistence, Gemini image extraction
 - src/utils: date helpers, duration parsing, projection calculations
 - src/components: auth, upload, and dashboard UI panels
 - src/types: shared domain interfaces
@@ -98,4 +106,5 @@ All reads and writes are scoped to the authenticated uid.
 
 - Do not commit real .env credentials.
 - Add Firestore Security Rules to enforce user-level access (request.auth.uid == user document id).
-- If your OCR endpoint is private, use VITE_VISION_API_KEY or proxy through a secured backend/function.
+- Browser-side Gemini keys are visible to clients; restrict the key by HTTP referrer and API scope.
+- For stronger security, proxy Gemini calls through a backend or Firebase Cloud Function.

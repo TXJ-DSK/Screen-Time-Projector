@@ -27,9 +27,13 @@ const requiredKeys: Array<keyof typeof firebaseConfig> = [
 
 const missingKeys = requiredKeys.filter((key) => !firebaseConfig[key]);
 
+function toEnvSuffix(key: string): string {
+  return key.replace(/([A-Z])/g, '_$1').toUpperCase();
+}
+
 export const firebaseRuntime: FirebaseRuntime = {
   configured: missingKeys.length === 0,
-  missingKeys: missingKeys.map((key) => `VITE_FIREBASE_${key.toUpperCase()}`),
+  missingKeys: missingKeys.map((key) => `VITE_FIREBASE_${toEnvSuffix(key)}`),
 };
 
 let firebaseApp: FirebaseApp | null = null;
