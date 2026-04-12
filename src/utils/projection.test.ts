@@ -16,6 +16,10 @@ function makeLog(
       { name: 'Chrome', minutesSpent: chromeMinutes },
       { name: 'Discord', minutesSpent: discordMinutes },
     ],
+    categories: [
+      { name: 'Productivity', minutesSpent: chromeMinutes },
+      { name: 'Social', minutesSpent: discordMinutes },
+    ],
   };
 }
 

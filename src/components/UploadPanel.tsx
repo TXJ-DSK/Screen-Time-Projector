@@ -1,29 +1,23 @@
 import { useState } from 'react';
 
+import {
+  extractApplicationsFromImage,
+  extractCategoriesFromImage,
+} from '../services/visionService';
 import type { ExtractedScreenTimeData } from '../types/domain';
 import { minutesToReadable, toDateKey } from '../utils/date';
 
 interface UploadPanelProps {
   isSaving: boolean;
   saveError: string | null;
-  onExtract: (
-    file: File,
-    startDate: string,
-    endDate: string,
-    daysInRange: number,
-    totalAverageMinutes: number,
-  ) => Promise<ExtractedScreenTimeData>;
   onSave: (data: ExtractedScreenTimeData) => Promise<void>;
 }
 
-export default function UploadPanel({
-  isSaving,
-  saveError,
-  onExtract,
-  onSave,
-}: UploadPanelProps) {
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
+export default function UploadPanel({ isSaving, saveError, onSave }: UploadPanelProps) {
+  const [appScreenshotFile, setAppScreenshotFile] = useState<File | null>(null);
+  const [categoryScreenshotFile, setCategoryScreenshotFile] = useState<File | null>(null);
+  const [isDraggingApp, setIsDraggingApp] = useState(false);
+  const [isDraggingCategory, setIsDraggingCategory] = useState(false);
   const [isExtracting, setIsExtracting] = useState(false);
   const [extractionError, setExtractionError] = useState<string | null>(null);
   const [extractedData, setExtractedData] = useState<ExtractedScreenTimeData | null>(
@@ -36,24 +30,66 @@ export default function UploadPanel({
 
   const [startDate, setStartDate] = useState<string>(sevenDaysAgoKey);
   const [endDate, setEndDate] = useState<string>(todayKey);
-  const [totalAverageMinutes, setTotalAverageMinutes] = useState<string>('480');
+  const [totalAverageHours, setTotalAverageHours] = useState<string>('8');
+  const [totalAverageMinutesInput, setTotalAverageMinutesInput] = useState<string>('0');
 
-  function onFileInputChange(event: React.ChangeEvent<HTMLInputElement>): void {
-    const nextFile = event.target.files?.[0] ?? null;
-    setSelectedFile(nextFile);
-    setExtractedData(null);
-    setExtractionError(null);
-  }
+  const handleAppDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDraggingApp(true);
+  };
 
-  function onDrop(event: React.DragEvent<HTMLDivElement>): void {
-    event.preventDefault();
-    setIsDragging(false);
+  const handleAppDragLeave = () => {
+    setIsDraggingApp(false);
+  };
 
-    const nextFile = event.dataTransfer.files?.[0] ?? null;
-    setSelectedFile(nextFile);
-    setExtractedData(null);
-    setExtractionError(null);
-  }
+  const handleAppDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDraggingApp(false);
+    const files = e.dataTransfer.files;
+    if (files?.length) {
+      setAppScreenshotFile(files[0]);
+      setExtractedData(null);
+      setExtractionError(null);
+    }
+  };
+
+  const handleAppFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files?.length) {
+      setAppScreenshotFile(files[0]);
+      setExtractedData(null);
+      setExtractionError(null);
+    }
+  };
+
+  const handleCategoryDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDraggingCategory(true);
+  };
+
+  const handleCategoryDragLeave = () => {
+    setIsDraggingCategory(false);
+  };
+
+  const handleCategoryDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDraggingCategory(false);
+    const files = e.dataTransfer.files;
+    if (files?.length) {
+      setCategoryScreenshotFile(files[0]);
+      setExtractedData(null);
+      setExtractionError(null);
+    }
+  };
+
+  const handleCategoryFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files?.length) {
+      setCategoryScreenshotFile(files[0]);
+      setExtractedData(null);
+      setExtractionError(null);
+    }
+  };
 
   function calculateDaysInRange(): number {
     const start = new Date(`${startDate}T00:00:00`);
@@ -64,8 +100,10 @@ export default function UploadPanel({
   }
 
   async function extractData(): Promise<void> {
-    if (!selectedFile) {
-      setExtractionError('Choose an image before extracting screen-time data.');
+    if (!appScreenshotFile && !categoryScreenshotFile) {
+      setExtractionError(
+        'Upload at least one screenshot (app or category) before extracting.',
+      );
       return;
     }
 
@@ -84,23 +122,40 @@ export default function UploadPanel({
       return;
     }
 
-    const totalMinutes = parseInt(totalAverageMinutes, 10);
-    if (isNaN(totalMinutes) || totalMinutes <= 0) {
-      setExtractionError('Please enter a valid total screen time (in minutes).');
+    const hours = parseInt(totalAverageHours, 10) || 0;
+    const minutes = parseInt(totalAverageMinutesInput, 10) || 0;
+    const totalMinutes = hours * 60 + minutes;
+
+    if (totalMinutes <= 0) {
+      setExtractionError('Please enter a valid total screen time.');
       return;
     }
 
     try {
       setIsExtracting(true);
       setExtractionError(null);
+
       const daysInRange = calculateDaysInRange();
-      const data = await onExtract(
-        selectedFile,
+
+      // Extract both apps and categories in parallel
+      const [applications, categories] = await Promise.all([
+        appScreenshotFile
+          ? extractApplicationsFromImage(appScreenshotFile)
+          : Promise.resolve([]),
+        categoryScreenshotFile
+          ? extractCategoriesFromImage(categoryScreenshotFile)
+          : Promise.resolve([]),
+      ]);
+
+      const data: ExtractedScreenTimeData = {
         startDate,
         endDate,
         daysInRange,
-        totalMinutes,
-      );
+        totalAverageMinutes: totalMinutes,
+        applications,
+        categories,
+      };
+
       setExtractedData(data);
     } catch (error) {
       setExtractionError(
@@ -128,30 +183,55 @@ export default function UploadPanel({
       <div className="panel-head">
         <h2>Screenshot Upload</h2>
         <p className="muted">
-          Drag and drop your screen-time screenshot, select the date range, and extract
-          app usage data.
+          Upload screenshots of app and category screen-time data, select the date range,
+          input your average daily screen time, and extract usage data.
         </p>
       </div>
 
-      <div
-        className={`dropzone ${isDragging ? 'dropzone-active' : ''}`}
-        onDragOver={(event) => {
-          event.preventDefault();
-          setIsDragging(true);
-        }}
-        onDragLeave={() => setIsDragging(false)}
-        onDrop={onDrop}
-      >
-        <p>{selectedFile ? selectedFile.name : 'Drop image here or choose a file'}</p>
-        <label className="file-picker" htmlFor="screenshot-file">
-          Select screenshot
-        </label>
-        <input
-          id="screenshot-file"
-          type="file"
-          accept="image/*"
-          onChange={onFileInputChange}
-        />
+      <div className="upload-section">
+        <h3>Application Usage</h3>
+        <div
+          className={`dropzone ${isDraggingApp ? 'dropzone-active' : ''}`}
+          onDragOver={handleAppDragOver}
+          onDragLeave={handleAppDragLeave}
+          onDrop={handleAppDrop}
+        >
+          <p>{appScreenshotFile ? appScreenshotFile.name : 'Drop app screenshot here'}</p>
+          <label className="file-picker" htmlFor="app-screenshot-file">
+            Select app screenshot
+          </label>
+          <input
+            id="app-screenshot-file"
+            type="file"
+            accept="image/*"
+            onChange={handleAppFileSelect}
+          />
+        </div>
+      </div>
+
+      <div className="upload-section">
+        <h3>Category Usage</h3>
+        <div
+          className={`dropzone ${isDraggingCategory ? 'dropzone-active' : ''}`}
+          onDragOver={handleCategoryDragOver}
+          onDragLeave={handleCategoryDragLeave}
+          onDrop={handleCategoryDrop}
+        >
+          <p>
+            {categoryScreenshotFile
+              ? categoryScreenshotFile.name
+              : 'Drop category screenshot here'}
+          </p>
+          <label className="file-picker" htmlFor="category-screenshot-file">
+            Select category screenshot
+          </label>
+          <input
+            id="category-screenshot-file"
+            type="file"
+            accept="image/*"
+            onChange={handleCategoryFileSelect}
+          />
+        </div>
       </div>
 
       <div className="date-range-inputs">
@@ -177,20 +257,39 @@ export default function UploadPanel({
           />
         </div>
 
-        <div className="input-group">
-          <label htmlFor="total-minutes">Average Total Screen Time (minutes):</label>
-          <input
-            id="total-minutes"
-            type="number"
-            value={totalAverageMinutes}
-            min="1"
-            onChange={(e) => setTotalAverageMinutes(e.target.value)}
-          />
-        </div>
-
         <p className="muted">
           Date range: {daysInRange} day{daysInRange !== 1 ? 's' : ''}
         </p>
+      </div>
+
+      <div className="average-time-inputs">
+        <fieldset>
+          <legend>Average Total Screen Time</legend>
+          <div className="time-inputs">
+            <div className="input-group">
+              <label htmlFor="total-hours">Hours:</label>
+              <input
+                id="total-hours"
+                type="number"
+                value={totalAverageHours}
+                min="0"
+                max="23"
+                onChange={(e) => setTotalAverageHours(e.target.value)}
+              />
+            </div>
+            <div className="input-group">
+              <label htmlFor="total-minutes">Minutes:</label>
+              <input
+                id="total-minutes"
+                type="number"
+                value={totalAverageMinutesInput}
+                min="0"
+                max="59"
+                onChange={(e) => setTotalAverageMinutesInput(e.target.value)}
+              />
+            </div>
+          </div>
+        </fieldset>
       </div>
 
       <div className="upload-actions">
@@ -200,7 +299,7 @@ export default function UploadPanel({
           onClick={extractData}
           disabled={isExtracting || isSaving}
         >
-          {isExtracting ? 'Extracting...' : 'Extract app usage'}
+          {isExtracting ? 'Extracting...' : 'Extract usage data'}
         </button>
 
         <button
@@ -215,7 +314,7 @@ export default function UploadPanel({
 
       {extractedData && (
         <div className="extraction-preview">
-          <h3>Extracted App Usage</h3>
+          <h3>Extracted Data</h3>
           <p>
             Date Range: <strong>{extractedData.startDate}</strong> to{' '}
             <strong>{extractedData.endDate}</strong>
@@ -227,15 +326,34 @@ export default function UploadPanel({
             Average Total:{' '}
             <strong>{minutesToReadable(extractedData.totalAverageMinutes)}</strong>
           </p>
-          <h4>Applications (daily average):</h4>
-          <ul>
-            {extractedData.applications.map((app) => (
-              <li key={app.name}>
-                <span>{app.name}</span>
-                <span>{minutesToReadable(app.minutesSpent)}</span>
-              </li>
-            ))}
-          </ul>
+
+          {extractedData.applications.length > 0 && (
+            <>
+              <h4>Applications (daily average):</h4>
+              <ul>
+                {extractedData.applications.map((app) => (
+                  <li key={app.name}>
+                    <span>{app.name}</span>
+                    <span>{minutesToReadable(app.minutesSpent)}</span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+
+          {extractedData.categories.length > 0 && (
+            <>
+              <h4>Categories (daily average):</h4>
+              <ul>
+                {extractedData.categories.map((cat) => (
+                  <li key={cat.name}>
+                    <span>{cat.name}</span>
+                    <span>{minutesToReadable(cat.minutesSpent)}</span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
         </div>
       )}
 

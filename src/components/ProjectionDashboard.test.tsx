@@ -21,6 +21,7 @@ const summary: WeeklyProjectionSummary = {
       baselineWeekMinutes: 280,
     },
   ],
+  categories: [],
 };
 
 describe('ProjectionDashboard', () => {

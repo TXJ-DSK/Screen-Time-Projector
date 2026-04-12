@@ -1,11 +1,13 @@
-import type { ApplicationUsage, ExtractedScreenTimeData } from '../types/domain';
+import type { ApplicationUsage, ScreenTimeCategory } from '../types/domain';
 import {
   normalizeAppName,
+  normalizeCategoryName,
   parseDurationToMinutes,
   sanitizeApplications,
+  sanitizeCategories,
 } from '../utils/parsing';
 
-interface VisionApiApplication {
+interface VisionApiItem {
   name?: string;
   minutesSpent?: number | string;
   minutes?: number | string;
@@ -13,7 +15,8 @@ interface VisionApiApplication {
 }
 
 interface VisionApiPayload {
-  applications?: VisionApiApplication[];
+  applications?: VisionApiItem[];
+  categories?: VisionApiItem[];
   totalMinutes?: number | string;
   extractedText?: string;
   text?: string;
@@ -69,8 +72,11 @@ async function fileToBase64(file: File): Promise<string> {
   });
 }
 
-function parseApplicationsFromText(text: string): ApplicationUsage[] {
-  const applications: ApplicationUsage[] = [];
+function parseItemsFromText(
+  text: string,
+  normalizer: (name: string) => string,
+): Array<{ name: string; minutesSpent: number }> {
+  const items: Array<{ name: string; minutesSpent: number }> = [];
   const lines = text.split(/\r?\n/);
 
   for (const line of lines) {
@@ -95,28 +101,21 @@ function parseApplicationsFromText(text: string): ApplicationUsage[] {
       continue;
     }
 
-    applications.push({
-      name: normalizeAppName(rawName),
+    items.push({
+      name: normalizer(rawName),
       minutesSpent,
     });
   }
 
-  return sanitizeApplications(applications);
+  return items;
 }
 
-function parseVisionPayload(
-  payload: VisionApiPayload,
-  startDate: string,
-  endDate: string,
-  daysInRange: number,
-  totalAverageMinutes: number,
-): ExtractedScreenTimeData {
+function parseVisionApplicationPayload(payload: VisionApiPayload): ApplicationUsage[] {
   const apiApplications = payload.applications ?? [];
 
   const applicationsFromList: ApplicationUsage[] = apiApplications
     .map((app) => {
       const name = normalizeAppName(app.name ?? 'Other');
-
       const minutesSource = app.minutesSpent ?? app.minutes ?? app.duration ?? 0;
       const minutesSpent = parseDurationToMinutes(minutesSource);
 
@@ -128,25 +127,47 @@ function parseVisionPayload(
     .filter((app) => app.minutesSpent > 0);
 
   const text = payload.extractedText ?? payload.text ?? '';
-  const applicationsFromText = text ? parseApplicationsFromText(text) : [];
+  const applicationsFromText = text ? parseItemsFromText(text, normalizeAppName) : [];
 
   const applications = sanitizeApplications([
     ...applicationsFromList,
     ...applicationsFromText,
   ]);
 
-  if (applications.length === 0 && totalAverageMinutes <= 0) {
+  if (applications.length === 0) {
     throw new Error('No valid application durations were extracted from the screenshot.');
   }
 
-  return {
-    startDate,
-    endDate,
-    daysInRange,
-    totalAverageMinutes,
-    applications,
-    rawText: text,
-  };
+  return applications;
+}
+
+function parseVisionCategoryPayload(payload: VisionApiPayload): ScreenTimeCategory[] {
+  const apiCategories = payload.categories ?? [];
+
+  const categoriesFromList: ScreenTimeCategory[] = apiCategories
+    .map((category) => {
+      const name = normalizeCategoryName(category.name ?? 'Other');
+      const minutesSource =
+        category.minutesSpent ?? category.minutes ?? category.duration ?? 0;
+      const minutesSpent = parseDurationToMinutes(minutesSource);
+
+      return {
+        name,
+        minutesSpent,
+      };
+    })
+    .filter((category) => category.minutesSpent > 0);
+
+  const text = payload.extractedText ?? payload.text ?? '';
+  const categoriesFromText = text ? parseItemsFromText(text, normalizeCategoryName) : [];
+
+  const categories = sanitizeCategories([...categoriesFromList, ...categoriesFromText]);
+
+  if (categories.length === 0) {
+    throw new Error('No valid category durations were extracted from the screenshot.');
+  }
+
+  return categories;
 }
 
 function parseJsonFromModelText(modelText: string): VisionApiPayload {
@@ -184,13 +205,9 @@ function readGeminiText(response: GeminiResponse): string {
   return parts.join('\n');
 }
 
-export async function extractScreenTimeFromImage(
+export async function extractApplicationsFromImage(
   imageFile: File,
-  startDate: string,
-  endDate: string,
-  daysInRange: number,
-  totalAverageMinutes: number,
-): Promise<ExtractedScreenTimeData> {
+): Promise<ApplicationUsage[]> {
   if (!geminiApiKey) {
     throw new Error('Missing VITE_GEMINI_API_KEY. Add your Gemini API key in .env.');
   }
@@ -201,8 +218,7 @@ export async function extractScreenTimeFromImage(
   const prompt =
     'Extract individual application screen-time data from this screenshot. ' +
     'Return only JSON with this shape: {"applications":[{"name":"string","minutesSpent":number}],"extractedText":"string"}. ' +
-    'Use minutes as integers and include only positive values. ' +
-    'Do NOT try to extract or infer dates from the screenshot.';
+    'Use minutes as integers and include only positive values.';
 
   const response = await fetch(requestUrl, {
     method: 'POST',
@@ -239,11 +255,58 @@ export async function extractScreenTimeFromImage(
   const geminiPayload = (await response.json()) as GeminiResponse;
   const modelText = readGeminiText(geminiPayload);
   const payload = parseJsonFromModelText(modelText);
-  return parseVisionPayload(
-    payload,
-    startDate,
-    endDate,
-    daysInRange,
-    totalAverageMinutes,
-  );
+  return parseVisionApplicationPayload(payload);
+}
+
+export async function extractCategoriesFromImage(
+  imageFile: File,
+): Promise<ScreenTimeCategory[]> {
+  if (!geminiApiKey) {
+    throw new Error('Missing VITE_GEMINI_API_KEY. Add your Gemini API key in .env.');
+  }
+
+  const base64Image = await fileToBase64(imageFile);
+  const requestUrl = `${geminiBaseUrl}/models/${encodeURIComponent(geminiModel)}:generateContent?key=${encodeURIComponent(geminiApiKey)}`;
+
+  const prompt =
+    'Extract screen-time data grouped by categories (e.g., Entertainment, Productivity, Social, Health & Fitness, Other) from this screenshot. ' +
+    'Return only JSON with this shape: {"categories":[{"name":"string","minutesSpent":number}],"extractedText":"string"}. ' +
+    'Use minutes as integers and include only positive values. Group apps into logical categories.';
+
+  const response = await fetch(requestUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            { text: prompt },
+            {
+              inline_data: {
+                mime_type: imageFile.type || 'image/png',
+                data: base64Image,
+              },
+            },
+          ],
+        },
+      ],
+      generationConfig: {
+        temperature: 0,
+        responseMimeType: 'application/json',
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    const details = await response.text();
+    throw new Error(`Gemini request failed (${response.status}). ${details}`.trim());
+  }
+
+  const geminiPayload = (await response.json()) as GeminiResponse;
+  const modelText = readGeminiText(geminiPayload);
+  const payload = parseJsonFromModelText(modelText);
+  return parseVisionCategoryPayload(payload);
 }

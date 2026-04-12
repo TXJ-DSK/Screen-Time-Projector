@@ -1,6 +1,18 @@
-import type { ApplicationUsage } from '../types/domain';
+import type { ApplicationUsage, ScreenTimeCategory } from '../types/domain';
 
 export function normalizeAppName(name: string): string {
+  const collapsed = name.trim().replace(/\s+/g, ' ');
+  if (collapsed.length === 0) {
+    return 'Other';
+  }
+
+  return collapsed
+    .split(' ')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');
+}
+
+export function normalizeCategoryName(name: string): string {
   const collapsed = name.trim().replace(/\s+/g, ' ');
   if (collapsed.length === 0) {
     return 'Other';
@@ -62,6 +74,33 @@ export function sanitizeApplications(
   }
 
   return [...appMap.entries()].map(([name, minutesSpent]) => ({
+    name,
+    minutesSpent,
+  }));
+}
+
+export function sumCategoryMinutes(categories: ScreenTimeCategory[]): number {
+  return categories.reduce((sum, category) => sum + category.minutesSpent, 0);
+}
+
+export function sanitizeCategories(
+  categories: ScreenTimeCategory[],
+): ScreenTimeCategory[] {
+  const catMap = new Map<string, number>();
+
+  for (const category of categories) {
+    const name = normalizeCategoryName(category.name);
+    const minutes = Math.max(0, Math.round(category.minutesSpent));
+
+    if (!name || minutes <= 0) {
+      continue;
+    }
+
+    const previousMinutes = catMap.get(name) ?? 0;
+    catMap.set(name, previousMinutes + minutes);
+  }
+
+  return [...catMap.entries()].map(([name, minutesSpent]) => ({
     name,
     minutesSpent,
   }));

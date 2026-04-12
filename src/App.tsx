@@ -19,7 +19,7 @@ import {
   fetchLogsForDateWindow,
   saveScreenTimeRange,
 } from './services/screenTimeService';
-import { extractScreenTimeFromImage, geminiRuntime } from './services/visionService';
+import { geminiRuntime } from './services/visionService';
 import type { DailyLogEntry, ExtractedScreenTimeData } from './types/domain';
 import { addDays } from './utils/date';
 import { calculateWeeklyProjection } from './utils/projection';
@@ -145,22 +145,6 @@ function App() {
     }
   }
 
-  async function handleExtractScreenTime(
-    file: File,
-    startDate: string,
-    endDate: string,
-    daysInRange: number,
-    totalAverageMinutes: number,
-  ): Promise<ExtractedScreenTimeData> {
-    return extractScreenTimeFromImage(
-      file,
-      startDate,
-      endDate,
-      daysInRange,
-      totalAverageMinutes,
-    );
-  }
-
   async function handleSaveExtractedData(
     extractedData: ExtractedScreenTimeData,
   ): Promise<void> {
@@ -242,7 +226,6 @@ function App() {
         <UploadPanel
           isSaving={isSaving}
           saveError={saveError}
-          onExtract={handleExtractScreenTime}
           onSave={handleSaveExtractedData}
         />
 

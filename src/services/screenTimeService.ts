@@ -14,15 +14,17 @@ import type {
   ApplicationUsage,
   DailyLogEntry,
   ExtractedScreenTimeData,
+  ScreenTimeCategory,
 } from '../types/domain';
 import { addDays, toDateKey } from '../utils/date';
-import { sanitizeApplications } from '../utils/parsing';
+import { sanitizeApplications, sanitizeCategories } from '../utils/parsing';
 import { getFirestoreDb } from './firebase';
 
 interface FirestoreDailyLog {
   date: Timestamp;
   totalMinutes: number;
   applications: ApplicationUsage[];
+  categories: ScreenTimeCategory[];
 }
 
 export async function ensureUserDocument(
@@ -47,15 +49,21 @@ export async function saveScreenTimeRange(
 ): Promise<void> {
   const db = getFirestoreDb();
   const applications = sanitizeApplications(extractedData.applications);
+  const categories = sanitizeCategories(extractedData.categories);
 
   // Parse dates
   const startDate = new Date(`${extractedData.startDate}T00:00:00`);
   const daysInRange = extractedData.daysInRange;
 
-  // Calculate averaged applications for each day
+  // Calculate averaged applications and categories for each day
   const averagedApplications: ApplicationUsage[] = applications.map((app) => ({
     name: app.name,
     minutesSpent: Math.round(app.minutesSpent / daysInRange),
+  }));
+
+  const averagedCategories: ScreenTimeCategory[] = categories.map((cat) => ({
+    name: cat.name,
+    minutesSpent: Math.round(cat.minutesSpent / daysInRange),
   }));
 
   // Use user-provided total average minutes
@@ -72,6 +80,7 @@ export async function saveScreenTimeRange(
         date: Timestamp.fromDate(currentDate),
         totalMinutes,
         applications: averagedApplications,
+        categories: averagedCategories,
       },
       { merge: true },
     );
@@ -104,6 +113,7 @@ export async function fetchLogsForDateWindow(
       dateIso: date.toISOString(),
       totalMinutes: data.totalMinutes,
       applications: sanitizeApplications(data.applications ?? []),
+      categories: sanitizeCategories(data.categories ?? []),
     };
   });
 }
