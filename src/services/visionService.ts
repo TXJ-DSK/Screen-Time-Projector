@@ -1,13 +1,11 @@
-import type { ExtractedScreenTimeData, ScreenTimeCategory } from '../types/domain';
-import { toDateKey } from '../utils/date';
+import type { ApplicationUsage, ExtractedScreenTimeData } from '../types/domain';
 import {
-  normalizeCategoryName,
+  normalizeAppName,
   parseDurationToMinutes,
-  sanitizeCategories,
-  sumCategoryMinutes,
+  sanitizeApplications,
 } from '../utils/parsing';
 
-interface VisionApiCategory {
+interface VisionApiApplication {
   name?: string;
   minutesSpent?: number | string;
   minutes?: number | string;
@@ -15,7 +13,7 @@ interface VisionApiCategory {
 }
 
 interface VisionApiPayload {
-  categories?: VisionApiCategory[];
+  applications?: VisionApiApplication[];
   totalMinutes?: number | string;
   extractedText?: string;
   text?: string;
@@ -71,8 +69,8 @@ async function fileToBase64(file: File): Promise<string> {
   });
 }
 
-function parseCategoriesFromText(text: string): ScreenTimeCategory[] {
-  const categories: ScreenTimeCategory[] = [];
+function parseApplicationsFromText(text: string): ApplicationUsage[] {
+  const applications: ApplicationUsage[] = [];
   const lines = text.split(/\r?\n/);
 
   for (const line of lines) {
@@ -97,24 +95,29 @@ function parseCategoriesFromText(text: string): ScreenTimeCategory[] {
       continue;
     }
 
-    categories.push({
-      name: normalizeCategoryName(rawName),
+    applications.push({
+      name: normalizeAppName(rawName),
       minutesSpent,
     });
   }
 
-  return sanitizeCategories(categories);
+  return sanitizeApplications(applications);
 }
 
-function parseVisionPayload(payload: VisionApiPayload): ExtractedScreenTimeData {
-  const apiCategories = payload.categories ?? [];
+function parseVisionPayload(
+  payload: VisionApiPayload,
+  startDate: string,
+  endDate: string,
+  daysInRange: number,
+  totalAverageMinutes: number,
+): ExtractedScreenTimeData {
+  const apiApplications = payload.applications ?? [];
 
-  const categoriesFromList: ScreenTimeCategory[] = apiCategories
-    .map((category) => {
-      const name = normalizeCategoryName(category.name ?? 'Other');
+  const applicationsFromList: ApplicationUsage[] = apiApplications
+    .map((app) => {
+      const name = normalizeAppName(app.name ?? 'Other');
 
-      const minutesSource =
-        category.minutesSpent ?? category.minutes ?? category.duration ?? 0;
+      const minutesSource = app.minutesSpent ?? app.minutes ?? app.duration ?? 0;
       const minutesSpent = parseDurationToMinutes(minutesSource);
 
       return {
@@ -122,26 +125,26 @@ function parseVisionPayload(payload: VisionApiPayload): ExtractedScreenTimeData 
         minutesSpent,
       };
     })
-    .filter((category) => category.minutesSpent > 0);
+    .filter((app) => app.minutesSpent > 0);
 
   const text = payload.extractedText ?? payload.text ?? '';
-  const categoriesFromText = text ? parseCategoriesFromText(text) : [];
+  const applicationsFromText = text ? parseApplicationsFromText(text) : [];
 
-  const categories = sanitizeCategories([...categoriesFromList, ...categoriesFromText]);
-  const inferredTotal = sumCategoryMinutes(categories);
-  const totalMinutes = Math.max(
-    inferredTotal,
-    parseDurationToMinutes(payload.totalMinutes ?? inferredTotal),
-  );
+  const applications = sanitizeApplications([
+    ...applicationsFromList,
+    ...applicationsFromText,
+  ]);
 
-  if (categories.length === 0 || totalMinutes <= 0) {
-    throw new Error('No valid category durations were extracted from the screenshot.');
+  if (applications.length === 0 && totalAverageMinutes <= 0) {
+    throw new Error('No valid application durations were extracted from the screenshot.');
   }
 
   return {
-    dateKey: toDateKey(new Date()),
-    totalMinutes,
-    categories,
+    startDate,
+    endDate,
+    daysInRange,
+    totalAverageMinutes,
+    applications,
     rawText: text,
   };
 }
@@ -183,6 +186,10 @@ function readGeminiText(response: GeminiResponse): string {
 
 export async function extractScreenTimeFromImage(
   imageFile: File,
+  startDate: string,
+  endDate: string,
+  daysInRange: number,
+  totalAverageMinutes: number,
 ): Promise<ExtractedScreenTimeData> {
   if (!geminiApiKey) {
     throw new Error('Missing VITE_GEMINI_API_KEY. Add your Gemini API key in .env.');
@@ -192,9 +199,10 @@ export async function extractScreenTimeFromImage(
   const requestUrl = `${geminiBaseUrl}/models/${encodeURIComponent(geminiModel)}:generateContent?key=${encodeURIComponent(geminiApiKey)}`;
 
   const prompt =
-    'Extract smartphone screen-time categories and durations from this screenshot. ' +
-    'Return only JSON with this shape: {"categories":[{"name":"string","minutesSpent":number}],"totalMinutes":number,"extractedText":"string"}. ' +
-    'Use minutes as integers and include only positive values.';
+    'Extract individual application screen-time data from this screenshot. ' +
+    'Return only JSON with this shape: {"applications":[{"name":"string","minutesSpent":number}],"extractedText":"string"}. ' +
+    'Use minutes as integers and include only positive values. ' +
+    'Do NOT try to extract or infer dates from the screenshot.';
 
   const response = await fetch(requestUrl, {
     method: 'POST',
@@ -231,5 +239,11 @@ export async function extractScreenTimeFromImage(
   const geminiPayload = (await response.json()) as GeminiResponse;
   const modelText = readGeminiText(geminiPayload);
   const payload = parseJsonFromModelText(modelText);
-  return parseVisionPayload(payload);
+  return parseVisionPayload(
+    payload,
+    startDate,
+    endDate,
+    daysInRange,
+    totalAverageMinutes,
+  );
 }

@@ -21,8 +21,8 @@ export default function ProjectionDashboard({
   onSignOut,
 }: ProjectionDashboardProps) {
   const maxProjectedMinutes =
-    summary.categories.reduce(
-      (max, category) => Math.max(max, category.projectedEndOfWeekMinutes),
+    summary.applications.reduce(
+      (max, app) => Math.max(max, app.projectedEndOfWeekMinutes),
       0,
     ) || 1;
 
@@ -34,7 +34,7 @@ export default function ProjectionDashboard({
           <h2>Current Week vs Projection</h2>
           <p className="muted">
             Projection is based on a {summary.lookbackDays}-day moving average per
-            category.
+            application.
           </p>
         </div>
 
@@ -74,31 +74,32 @@ export default function ProjectionDashboard({
 
       {fetchError && <p className="error-text">{fetchError}</p>}
 
-      {summary.categories.length === 0 ? (
+      {summary.applications.length === 0 ? (
         <p className="empty-state">
-          No category history yet. Upload at least one screenshot to generate projections.
+          No app usage history yet. Upload at least one screenshot to generate
+          projections.
         </p>
       ) : (
-        <div className="projection-list" aria-label="Category projections">
-          {summary.categories.map((category) => {
+        <div className="projection-list" aria-label="Application projections">
+          {summary.applications.map((app) => {
             const projectedWidth = clamp(
-              (category.projectedEndOfWeekMinutes / maxProjectedMinutes) * 100,
+              (app.projectedEndOfWeekMinutes / maxProjectedMinutes) * 100,
               2,
               100,
             );
             const actualWidth = clamp(
-              (category.weekToDateMinutes / maxProjectedMinutes) * 100,
+              (app.weekToDateMinutes / maxProjectedMinutes) * 100,
               2,
               projectedWidth,
             );
 
             return (
-              <article key={category.name} className="projection-row">
+              <article key={app.name} className="projection-row">
                 <div className="projection-meta">
-                  <h3>{category.name}</h3>
+                  <h3>{app.name}</h3>
                   <p>
-                    {minutesToReadable(category.weekToDateMinutes)} now /{' '}
-                    {minutesToReadable(category.projectedEndOfWeekMinutes)} projected
+                    {minutesToReadable(app.weekToDateMinutes)} now /{' '}
+                    {minutesToReadable(app.projectedEndOfWeekMinutes)} projected
                   </p>
                 </div>
 

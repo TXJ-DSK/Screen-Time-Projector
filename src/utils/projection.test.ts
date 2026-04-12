@@ -3,20 +3,24 @@ import { describe, expect, test } from 'vitest';
 import type { DailyLogEntry } from '../types/domain';
 import { calculateWeeklyProjection } from './projection';
 
-function makeLog(dateKey: string, entertainment: number, social: number): DailyLogEntry {
+function makeLog(
+  dateKey: string,
+  chromeMinutes: number,
+  discordMinutes: number,
+): DailyLogEntry {
   return {
     dateKey,
     dateIso: new Date(`${dateKey}T00:00:00`).toISOString(),
-    totalMinutes: entertainment + social,
-    categories: [
-      { name: 'Entertainment', minutesSpent: entertainment },
-      { name: 'Social', minutesSpent: social },
+    totalMinutes: chromeMinutes + discordMinutes,
+    applications: [
+      { name: 'Chrome', minutesSpent: chromeMinutes },
+      { name: 'Discord', minutesSpent: discordMinutes },
     ],
   };
 }
 
 describe('calculateWeeklyProjection', () => {
-  test('calculates category projections from a 21-day window', () => {
+  test('calculates application projections from a 21-day window', () => {
     const logs: DailyLogEntry[] = [
       makeLog('2026-03-22', 60, 30),
       makeLog('2026-03-23', 70, 20),
@@ -43,16 +47,14 @@ describe('calculateWeeklyProjection', () => {
 
     const summary = calculateWeeklyProjection(logs, 21, new Date('2026-04-11T12:00:00'));
 
-    expect(summary.categories).toHaveLength(2);
+    expect(summary.applications).toHaveLength(2);
     expect(summary.totalWeekToDateMinutes).toBeGreaterThan(0);
     expect(summary.totalProjectedEndOfWeekMinutes).toBeGreaterThanOrEqual(
       summary.totalWeekToDateMinutes,
     );
 
-    const entertainment = summary.categories.find(
-      (category) => category.name === 'Entertainment',
-    );
-    expect(entertainment?.averageDailyMinutes).toBeGreaterThan(0);
+    const chrome = summary.applications.find((app) => app.name === 'Chrome');
+    expect(chrome?.averageDailyMinutes).toBeGreaterThan(0);
   });
 
   test('clamps lookback days to at least 14 days', () => {
@@ -61,6 +63,6 @@ describe('calculateWeeklyProjection', () => {
     const summary = calculateWeeklyProjection(logs, 3, new Date('2026-04-11T12:00:00'));
 
     expect(summary.lookbackDays).toBe(14);
-    expect(summary.categories[0]?.baselineWeekMinutes).toBeGreaterThan(0);
+    expect(summary.applications[0]?.baselineWeekMinutes).toBeGreaterThan(0);
   });
 });

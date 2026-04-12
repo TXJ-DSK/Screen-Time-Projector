@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'vitest';
 
 import {
-  normalizeCategoryName,
+  normalizeAppName,
   parseDurationToMinutes,
-  sanitizeCategories,
+  sanitizeApplications,
 } from './parsing';
 
 describe('parseDurationToMinutes', () => {
@@ -22,21 +22,21 @@ describe('parseDurationToMinutes', () => {
   });
 });
 
-describe('category sanitizing', () => {
-  test('normalizes and merges duplicate category names', () => {
-    const categories = sanitizeCategories([
-      { name: ' entertainment ', minutesSpent: 50 },
-      { name: 'Entertainment', minutesSpent: 20 },
-      { name: 'SOCIAL', minutesSpent: 30 },
+describe('application sanitizing', () => {
+  test('normalizes and merges duplicate application names', () => {
+    const applications = sanitizeApplications([
+      { name: ' Chrome ', minutesSpent: 50 },
+      { name: 'Chrome', minutesSpent: 20 },
+      { name: 'DISCORD', minutesSpent: 30 },
     ]);
 
-    expect(categories).toEqual([
-      { name: 'Entertainment', minutesSpent: 70 },
-      { name: 'Social', minutesSpent: 30 },
+    expect(applications).toEqual([
+      { name: 'Chrome', minutesSpent: 70 },
+      { name: 'Discord', minutesSpent: 30 },
     ]);
   });
 
-  test('normalizes category names to title case', () => {
-    expect(normalizeCategoryName('  PRODUCTIVITY  tools ')).toBe('Productivity Tools');
+  test('normalizes application names to title case', () => {
+    expect(normalizeAppName('  visual  studio  code  ')).toBe('Visual Studio Code');
   });
 });

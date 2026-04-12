@@ -12,9 +12,9 @@ const summary: WeeklyProjectionSummary = {
   totalWeekToDateMinutes: 420,
   totalProjectedEndOfWeekMinutes: 500,
   totalBaselineWeekMinutes: 490,
-  categories: [
+  applications: [
     {
-      name: 'Entertainment',
+      name: 'Chrome',
       weekToDateMinutes: 260,
       averageDailyMinutes: 40,
       projectedEndOfWeekMinutes: 300,
@@ -24,7 +24,7 @@ const summary: WeeklyProjectionSummary = {
 };
 
 describe('ProjectionDashboard', () => {
-  test('renders projection statistics and categories', () => {
+  test('renders projection statistics and applications', () => {
     render(
       <ProjectionDashboard
         userEmail="student@example.com"
@@ -38,7 +38,7 @@ describe('ProjectionDashboard', () => {
     );
 
     expect(screen.getByText('Current Week vs Projection')).toBeInTheDocument();
-    expect(screen.getByText('Entertainment')).toBeInTheDocument();
+    expect(screen.getByText('Chrome')).toBeInTheDocument();
     expect(screen.getByText(/Projected end of week/)).toBeInTheDocument();
   });
 });

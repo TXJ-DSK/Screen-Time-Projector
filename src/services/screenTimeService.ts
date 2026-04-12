@@ -11,18 +11,18 @@ import {
 } from 'firebase/firestore';
 
 import type {
+  ApplicationUsage,
   DailyLogEntry,
   ExtractedScreenTimeData,
-  ScreenTimeCategory,
 } from '../types/domain';
-import { toDateKey } from '../utils/date';
-import { sanitizeCategories, sumCategoryMinutes } from '../utils/parsing';
+import { addDays, toDateKey } from '../utils/date';
+import { sanitizeApplications } from '../utils/parsing';
 import { getFirestoreDb } from './firebase';
 
 interface FirestoreDailyLog {
   date: Timestamp;
   totalMinutes: number;
-  categories: ScreenTimeCategory[];
+  applications: ApplicationUsage[];
 }
 
 export async function ensureUserDocument(
@@ -41,23 +41,41 @@ export async function ensureUserDocument(
   );
 }
 
-export async function saveDailyLog(
+export async function saveScreenTimeRange(
   uid: string,
   extractedData: ExtractedScreenTimeData,
 ): Promise<void> {
   const db = getFirestoreDb();
-  const categories = sanitizeCategories(extractedData.categories);
-  const totalMinutes = extractedData.totalMinutes || sumCategoryMinutes(categories);
+  const applications = sanitizeApplications(extractedData.applications);
 
-  await setDoc(
-    doc(db, 'users', uid, 'daily_logs', extractedData.dateKey),
-    {
-      date: Timestamp.fromDate(new Date(`${extractedData.dateKey}T00:00:00`)),
-      totalMinutes,
-      categories,
-    },
-    { merge: true },
-  );
+  // Parse dates
+  const startDate = new Date(`${extractedData.startDate}T00:00:00`);
+  const daysInRange = extractedData.daysInRange;
+
+  // Calculate averaged applications for each day
+  const averagedApplications: ApplicationUsage[] = applications.map((app) => ({
+    name: app.name,
+    minutesSpent: Math.round(app.minutesSpent / daysInRange),
+  }));
+
+  // Use user-provided total average minutes
+  const totalMinutes = extractedData.totalAverageMinutes;
+
+  // Save to each date in range
+  for (let i = 0; i < daysInRange; i++) {
+    const currentDate = addDays(startDate, i);
+    const dateKey = toDateKey(currentDate);
+
+    await setDoc(
+      doc(db, 'users', uid, 'daily_logs', dateKey),
+      {
+        date: Timestamp.fromDate(currentDate),
+        totalMinutes,
+        applications: averagedApplications,
+      },
+      { merge: true },
+    );
+  }
 }
 
 export async function fetchLogsForDateWindow(
@@ -85,7 +103,7 @@ export async function fetchLogsForDateWindow(
       dateKey: snapshotDoc.id || toDateKey(date),
       dateIso: date.toISOString(),
       totalMinutes: data.totalMinutes,
-      categories: sanitizeCategories(data.categories ?? []),
+      applications: sanitizeApplications(data.applications ?? []),
     };
   });
 }

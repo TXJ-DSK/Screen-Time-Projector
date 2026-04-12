@@ -1,5 +1,5 @@
 import type {
-  CategoryProjection,
+  ApplicationProjection,
   DailyLogEntry,
   WeeklyProjectionSummary,
 } from '../types/domain';
@@ -22,42 +22,42 @@ export function calculateWeeklyProjection(
     logsByDate.set(log.dateKey, log);
   }
 
-  const categoryHistory = new Map<string, number[]>();
-  const categoryWeekToDate = new Map<string, number>();
+  const applicationHistory = new Map<string, number[]>();
+  const applicationWeekToDate = new Map<string, number>();
 
   for (let dayOffset = 0; dayOffset < safeLookback; dayOffset += 1) {
     const day = addDays(lookbackStart, dayOffset);
     const dateKey = toDateKey(day);
     const log = logsByDate.get(dateKey);
-    const categoryMinuteMap = new Map<string, number>();
+    const applicationMinuteMap = new Map<string, number>();
 
     if (log) {
-      for (const category of log.categories) {
-        categoryMinuteMap.set(
-          category.name,
-          (categoryMinuteMap.get(category.name) ?? 0) + category.minutesSpent,
+      for (const app of log.applications) {
+        applicationMinuteMap.set(
+          app.name,
+          (applicationMinuteMap.get(app.name) ?? 0) + app.minutesSpent,
         );
       }
     }
 
-    const knownCategories = new Set<string>([
-      ...categoryHistory.keys(),
-      ...categoryMinuteMap.keys(),
+    const knownApplications = new Set<string>([
+      ...applicationHistory.keys(),
+      ...applicationMinuteMap.keys(),
     ]);
 
-    for (const categoryName of knownCategories) {
-      if (!categoryHistory.has(categoryName)) {
-        categoryHistory.set(categoryName, []);
+    for (const appName of knownApplications) {
+      if (!applicationHistory.has(appName)) {
+        applicationHistory.set(appName, []);
       }
 
-      categoryHistory.get(categoryName)?.push(categoryMinuteMap.get(categoryName) ?? 0);
+      applicationHistory.get(appName)?.push(applicationMinuteMap.get(appName) ?? 0);
     }
 
     if (day >= weekStart && day <= endDate) {
-      for (const [categoryName, minutes] of categoryMinuteMap.entries()) {
-        categoryWeekToDate.set(
-          categoryName,
-          (categoryWeekToDate.get(categoryName) ?? 0) + minutes,
+      for (const [appName, minutes] of applicationMinuteMap.entries()) {
+        applicationWeekToDate.set(
+          appName,
+          (applicationWeekToDate.get(appName) ?? 0) + minutes,
         );
       }
     }
@@ -69,11 +69,11 @@ export function calculateWeeklyProjection(
   );
   const daysRemainingInWeek = Math.max(0, 7 - daysElapsedInWeek);
 
-  const categories: CategoryProjection[] = [...categoryHistory.entries()]
+  const applications: ApplicationProjection[] = [...applicationHistory.entries()]
     .map(([name, minutesHistory]) => {
       const historyTotal = minutesHistory.reduce((sum, value) => sum + value, 0);
       const averageDailyMinutes = Math.round(historyTotal / safeLookback);
-      const weekToDateMinutes = categoryWeekToDate.get(name) ?? 0;
+      const weekToDateMinutes = applicationWeekToDate.get(name) ?? 0;
       const projectedEndOfWeekMinutes =
         weekToDateMinutes + averageDailyMinutes * daysRemainingInWeek;
 
@@ -85,21 +85,19 @@ export function calculateWeeklyProjection(
         baselineWeekMinutes: averageDailyMinutes * 7,
       };
     })
-    .filter(
-      (category) => category.baselineWeekMinutes > 0 || category.weekToDateMinutes > 0,
-    )
+    .filter((app) => app.baselineWeekMinutes > 0 || app.weekToDateMinutes > 0)
     .sort((a, b) => b.projectedEndOfWeekMinutes - a.projectedEndOfWeekMinutes);
 
-  const totalWeekToDateMinutes = categories.reduce(
-    (sum, category) => sum + category.weekToDateMinutes,
+  const totalWeekToDateMinutes = applications.reduce(
+    (sum, app) => sum + app.weekToDateMinutes,
     0,
   );
-  const totalProjectedEndOfWeekMinutes = categories.reduce(
-    (sum, category) => sum + category.projectedEndOfWeekMinutes,
+  const totalProjectedEndOfWeekMinutes = applications.reduce(
+    (sum, app) => sum + app.projectedEndOfWeekMinutes,
     0,
   );
-  const totalBaselineWeekMinutes = categories.reduce(
-    (sum, category) => sum + category.baselineWeekMinutes,
+  const totalBaselineWeekMinutes = applications.reduce(
+    (sum, app) => sum + app.baselineWeekMinutes,
     0,
   );
 
@@ -111,6 +109,6 @@ export function calculateWeeklyProjection(
     totalWeekToDateMinutes,
     totalProjectedEndOfWeekMinutes,
     totalBaselineWeekMinutes,
-    categories,
+    applications,
   };
 }

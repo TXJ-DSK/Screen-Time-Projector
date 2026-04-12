@@ -2,7 +2,7 @@
 
 ## 1. Project Overview
 
-A web application designed to help users track, manage, and project their screen time. The app allows users to upload daily screenshots of their device's screen time usage, extracts the data via an external OCR/vision API, and stores it in Firebase. Using historical data, the app calculates and displays projections for future screen time usage by category (e.g., Entertainment, Social, Productivity).
+A web application designed to help users track, manage, and project their screen time by individual applications. The app allows users to upload screenshots of their device's screen time usage, select the date range those screenshots cover, extract the application usage data via an external vision API, and stores it in Firebase. Using historical data, the app calculates and displays projections for future screen time usage by application (e.g., Chrome, Discord, Visual Studio Code).
 
 ## 2. Tech Stack & Environment strictly required
 
@@ -26,17 +26,21 @@ The project MUST adhere to the following exact versions and technologies:
 
 ### B. Screenshot Upload & Data Extraction
 
-- **UI:** A dedicated upload component allowing users to drag-and-drop or select a screenshot image of their daily screen time.
+- **UI:** A dedicated upload component allowing users to:
+  1. Drag-and-drop or select a screenshot image of their screen time usage.
+  2. Select a date range (start and end date, both cannot be in the future; max date is today).
+  3. Input the average total screen time for the selected date range.
 - **Processing:**
   1. The image is temporarily held in state.
-  2. The app calls a designated external API (e.g., OpenAI Vision, Google Cloud Vision) to extract category names and duration (in minutes) from the screenshot.
+  2. The app calls the vision API to extract application names and their screen time durations (in minutes) from the screenshot. **The API should NOT try to extract or infer dates from the screenshot.**
   3. The extracted data is parsed into a structured JSON format.
-- **Storage:** The structured data is saved to Firestore under the user's specific document structure, tagged with the current date.
+  4. If the date range is 1 day, the extracted data is saved directly to that date. If the date range is multiple days, the extracted data is averaged and distributed across all dates in the range.
+- **Storage:** The averaged daily data is saved to Firestore under the user's specific document structure, one entry per day in the date range.
 
 ### C. Dashboard & Projections
 
 - **Data Retrieval:** Fetch the user's screen time data for the current week and previous weeks from Firestore.
-- **Projection Logic:** Calculate a simple moving average or trendline based on the past 14-21 days of category-specific data to project expected screen time for the end of the current week.
+- **Projection Logic:** Calculate a simple moving average or trendline based on the past 14-21 days of application-specific data to project expected screen time for the end of the current week.
 - **Visualization:** Display the current usage vs. projected usage in a clear, comparative UI (e.g., bar charts or progress rings).
 
 ## 4. Data Architecture (Firestore)
@@ -51,10 +55,10 @@ The database should follow a subcollection structure to ensure efficient queryin
   - **Subcollection:** `daily_logs`
     - `documentId`: `YYYY-MM-DD`
     - `date`: timestamp
-    - `totalMinutes`: number
-    - `categories`: Array of Objects
-      - `name`: string (e.g., "Entertainment")
-      - `minutesSpent`: number
+    - `totalMinutes`: number (average daily total)
+    - `applications`: Array of Objects
+      - `name`: string (e.g., "Chrome", "Discord")
+      - `minutesSpent`: number (average daily usage for that app)
 
 ## 5. Agent Directives & Coding Standards
 

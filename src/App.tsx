@@ -17,7 +17,7 @@ import { firebaseRuntime } from './services/firebase';
 import {
   ensureUserDocument,
   fetchLogsForDateWindow,
-  saveDailyLog,
+  saveScreenTimeRange,
 } from './services/screenTimeService';
 import { extractScreenTimeFromImage, geminiRuntime } from './services/visionService';
 import type { DailyLogEntry, ExtractedScreenTimeData } from './types/domain';
@@ -145,6 +145,22 @@ function App() {
     }
   }
 
+  async function handleExtractScreenTime(
+    file: File,
+    startDate: string,
+    endDate: string,
+    daysInRange: number,
+    totalAverageMinutes: number,
+  ): Promise<ExtractedScreenTimeData> {
+    return extractScreenTimeFromImage(
+      file,
+      startDate,
+      endDate,
+      daysInRange,
+      totalAverageMinutes,
+    );
+  }
+
   async function handleSaveExtractedData(
     extractedData: ExtractedScreenTimeData,
   ): Promise<void> {
@@ -157,7 +173,7 @@ function App() {
       setIsSaving(true);
       setSaveError(null);
 
-      await saveDailyLog(user.uid, extractedData);
+      await saveScreenTimeRange(user.uid, extractedData);
       await loadRecentLogs(user);
     } catch (error) {
       setSaveError(toErrorMessage(error));
@@ -226,7 +242,7 @@ function App() {
         <UploadPanel
           isSaving={isSaving}
           saveError={saveError}
-          onExtract={extractScreenTimeFromImage}
+          onExtract={handleExtractScreenTime}
           onSave={handleSaveExtractedData}
         />
 
